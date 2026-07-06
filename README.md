@@ -110,21 +110,28 @@ Edit `.env` with the following variables:
 
 ```env
 # Django Settings
-SECRET_KEY=secret-key-here
+SECRET_KEY=your-secret-key-here
 DEBUG=True
 
 # Database (leave unset to use local SQLite)
 DATABASE_URL=postgresql://user:password@host:5432/dbname
+
+# Supabase S3 Media Storage
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
+AWS_STORAGE_BUCKET_NAME=media
+AWS_S3_ENDPOINT_URL=https://your-project.supabase.co/storage/v1/s3
+AWS_S3_REGION_NAME=ap-southeast-1
 ```
 
 > **Tip:** Leave `DATABASE_URL` unset to use a local SQLite database for development.
 
-### 5. Download Media Files
+### 5. Configure Media Storage (Supabase S3)
 
-Download the `media/` folder from:  
- [Google Drive – Media Folder](https://drive.google.com/drive/folders/1gz0SvMe0pYM71-PdeljfQt_BYKn3_1tH)
-
-Place it in the same directory as `manage.py` (`Farm2Market/media/`).
+Farm2Market uses **Supabase Storage (S3)** to handle user-uploaded product images.
+- Create a **Public** bucket named `media` in your Supabase project.
+- Inside the bucket, create a folder named `product_images`.
+- Add your S3 Connection details to the `.env` file as shown above.
 
 ### 6. Database Migration
 ```bash
@@ -155,46 +162,23 @@ Visit `http://127.0.0.1:8000/` in your browser.
 ##  Project Structure
 
 ```bash
-Farm2Market/                        ← Root repo
-├── README.md
-├── images/                         ← Project screenshots
-├── Reports/                        ← PDF documentation
-│   ├── Project_Proposal.pdf
-│   ├── SRS.pdf
-│   └── Project Progress Report.pdf
-└── Farm2Market/                    ← Django project root
-    ├── manage.py
-    ├── requirements.txt
-    ├── .env                        ← Local secrets (not committed)
-    ├── .env.example
-    ├── media/                      ← Uploaded product images
-    │   └── product_images/
-    ├── templates/                  ← HTML templates
-    │   ├── base.html               ← Shared base layout
-    │   └── F2M/
-    │       ├── home.html
-    │       ├── products.html
-    │       ├── cart.html
-    │       ├── edit_product.html
-    │       ├── farmer_dashboard.html
-    │       ├── farmer_profile.html
-    │       ├── buyer_dashboard.html
-    │       ├── buyer_profile.html
-    │       ├── login.html
-    │       ├── register.html
-    │       └── footer.html
-    ├── f2m_app/                    ← Main application
-    │   ├── models.py               ← Database models
-    │   ├── views.py                ← View logic
-    │   ├── urls.py                 ← URL routing
-    │   ├── admin.py                ← Admin configuration
-    │   ├── context_processors.py   ← Cart count & notifications
-    │   └── migrations/
-    └── Farm2Market/                ← Project configuration
-        ├── settings.py
-        ├── urls.py
-        ├── wsgi.py
-        └── asgi.py
+Farm2Market/              ← Repo root
+└── Farm2Market/          ← Django project root (manage.py lives here)
+    ├── Farm2Market/      ← Project config (settings, urls, wsgi, asgi)
+    ├── apps/
+    │   ├── accounts/     ← Auth, user profiles (Farmer & Buyer)
+    │   ├── products/     ← Product catalog & categories
+    │   ├── cart/         ← Shopping cart (DB + session-based)
+    │   ├── orders/       ← Order lifecycle & logistics
+    │   └── notifications/← Per-user, per-order notification system
+    └── templates/
+        ├── base.html     ← Shared layout
+        ├── footer.html
+        ├── accounts/
+        ├── cart/
+        ├── orders/
+        └── products/
+
 ```
 
 
@@ -247,6 +231,10 @@ Farm2Market/                        ← Root repo
 | `SECRET_KEY`   | Yes      | Django secret key for cryptographic signing         |
 | `DEBUG`        | No       | `True` for development, `False` for production      |
 | `DATABASE_URL` | No       | PostgreSQL connection string; defaults to SQLite    |
+| `AWS_ACCESS_KEY_ID` | Yes | Supabase S3 Access Key for image uploads            |
+| `AWS_SECRET_ACCESS_KEY` | Yes | Supabase S3 Secret Key                          |
+| `AWS_STORAGE_BUCKET_NAME`| Yes | Target S3 bucket (e.g. `media`)                |
+| `AWS_S3_ENDPOINT_URL` | Yes | Supabase S3 Endpoint URL                          |
 
 The project uses `dj-database-url` with a `DATABASE_URL` environment variable, making it straightforward to deploy on platforms like **Render**, **Railway**, or **Heroku** with a Supabase PostgreSQL database.
 
