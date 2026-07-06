@@ -150,7 +150,7 @@
                                 </div>
                                 
                                 <!-- Action Button -->
-                                {% if not user.is_authenticated or user.profile.role == 'buyer' %}
+                                {% if not user.is_authenticated or user.profile.role == 'buyer' or user.profile.role == 'farmer' and product.farmer != user.profile %}
                                     <form method="POST" action="{% url 'add_to_cart_view' product.product_id %}" class="flex-shrink-0">
                                         {% csrf_token %}
                                             <button type="submit" class="relative overflow-hidden group/btn w-full bg-green-600 text-white font-medium py-2 px-4 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 hover:bg-green-700 active:scale-95 shadow-sm hover:shadow-md hover:shadow-green-600/30">

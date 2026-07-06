@@ -72,6 +72,18 @@
                 </span>
             </button>
 
+            <button onclick="switchTab('purchases')" id="nav-purchases"
+                class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition-all duration-150 text-left">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                My Purchases
+                <span class="ml-auto text-[10px] font-bold bg-yellow-200 text-yellow-900 px-2 py-0.5 rounded-full">
+                    {{ purchase_orders|length }}
+                </span>
+            </button>
+
             <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-4 pt-4 pb-1">Account</p>
 
             <a href="{% url 'profile_view' %}?tab=farm"
@@ -497,6 +509,80 @@
                 </div>
             </div><!-- end tab-orders -->
 
+            <!-- ── TAB: My Purchases ── -->
+            <div id="tab-purchases" class="tab-panel hidden">
+                <div class="mb-5">
+                    <h1 class="text-2xl font-extrabold text-gray-900">My Purchases</h1>
+                    <p class="text-gray-500 text-sm mt-1">Orders you placed as a buyer from other farmers.</p>
+                </div>
+
+                <div class="space-y-6 mt-6">
+                    {% if not purchase_orders %}
+                    <div class="bg-white rounded-2xl border border-green-100 shadow-sm p-6 sm:p-8">
+                        <div class="flex flex-col items-center justify-center py-16 text-center">
+                            <h3 class="text-xl font-bold text-gray-800 mb-2">No Purchases Yet</h3>
+                            <p class="text-gray-500 text-sm max-w-xs mb-6">You haven't bought anything from other farmers at the moment.</p>
+                        </div>
+                    </div>
+                    {% else %}
+                        {% for order in purchase_orders %}
+                        <div class="bg-white rounded-2xl border border-green-100 shadow-sm p-6 relative">
+                            <div class="flex justify-between items-center pb-4 border-b border-gray-100 mb-4">
+                                <div>
+                                    <h3 class="text-lg font-bold text-gray-900 border-l-4 border-[#1A7753] pl-2">Order #{{ order.order_id }}</h3>
+                                    <p class="text-sm text-gray-500 mt-1 pl-3">From: <span class="font-medium text-gray-700">{{ order.farmer.farm_name|default:order.farmer.user.username }}</span> | {{ order.created_at|date:"M d, Y h:i A" }}</p>
+                                </div>
+                                <span class="text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full
+                                    {% if order.status == 'COMPLETED' %}bg-green-100 text-green-800
+                                    {% elif order.status == 'REJECTED' or order.status == 'CANCELLED' %}bg-red-100 text-red-800
+                                    {% elif order.status == 'DELIVERED' %}bg-teal-100 text-teal-800
+                                    {% else %}bg-yellow-100 text-yellow-800{% endif %}">
+                                    {{ order.get_status_display }}
+                                </span>
+                            </div>
+
+                            <div class="bg-gray-50 rounded-xl p-4 mb-4">
+                                <p class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Order Items</p>
+                                <div class="space-y-2">
+                                    {% for item in order.items.all %}
+                                    <div class="flex justify-between items-center text-sm">
+                                        <div class="flex items-center gap-2">
+                                            <span class="w-6 h-6 rounded bg-white text-gray-600 border border-gray-200 flex items-center justify-center text-xs font-bold shadow-sm">{{ item.quantity }}x</span>
+                                            <span class="text-gray-800 font-medium">{{ item.product.name }}</span>
+                                        </div>
+                                        <span class="font-bold text-gray-900">৳{{ item.subtotal }}</span>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+
+                            <!-- Action Panel -->
+                            <div class="mt-4 pt-4 border-t border-gray-100 flex items-center justify-end gap-3">
+                                {% if order.status == 'PENDING' %}
+                                    <form method="POST" action="{% url 'buyer_order_action_view' order.order_id %}">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="cancel">
+                                        <button type="submit" class="bg-white border border-red-200 hover:bg-red-50 hover:border-red-300 text-red-600 px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm">Cancel Order</button>
+                                    </form>
+                                {% elif order.status == 'DELIVERED' %}
+                                    <form method="POST" action="{% url 'buyer_order_action_view' order.order_id %}">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="confirm_receipt">
+                                        <button type="submit" class="bg-[#1A7753] hover:bg-[#156042] text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5 flex gap-2 items-center">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                                            Confirm Receipt
+                                        </button>
+                                    </form>
+                                {% elif order.status == 'COMPLETED' %}
+                                    <p class="text-sm text-green-600 mr-auto font-bold"><svg class="w-5 h-5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Order Completed</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div><!-- end tab-purchases -->
+
         </div>
     </div><!-- end main content -->
     </div>
@@ -505,7 +591,7 @@
 
 {% block extra_scripts %}
 <script>
-    const TABS = ['overview', 'products', 'add', 'orders'];
+    const TABS = ['overview', 'products', 'add', 'orders', 'purchases'];
 
     function switchTab(name) {
         TABS.forEach(t => {

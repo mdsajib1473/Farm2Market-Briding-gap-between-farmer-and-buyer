@@ -93,7 +93,7 @@ def login_view(request):
             
             # Merge session cart into database cart
             session_cart = request.session.get('cart', {})
-            if session_cart and hasattr(user, 'profile') and user.profile.role == 'buyer':
+            if session_cart and hasattr(user, 'profile') and user.profile.role in ('buyer', 'farmer'):
                 buyer_profile = user.profile
                 cart, created = Cart.objects.get_or_create(buyer=buyer_profile)
                 
@@ -332,13 +332,15 @@ def farmer_dashboard_view(request):
 
     # Orders & Logistics fetching
     orders = Order.objects.filter(farmer=farmer_profile).prefetch_related('items__product', 'logistic', 'buyer__user').order_by('-created_at')
+    # Orders this farmer placed as a buyer from other farmers
+    purchase_orders = Order.objects.filter(buyer=farmer_profile).exclude(farmer=farmer_profile).prefetch_related('items__product', 'logistic', 'farmer__user').order_by('-created_at')
     logistics = Logistic.objects.all()
 
     # Active tab is driven by the URL query param
-    active_tab = request.GET.get('tab', 'dashboard')
-    valid_tabs = ['dashboard', 'orders']
+    active_tab = request.GET.get('tab', 'overview')
+    valid_tabs = ['overview', 'products', 'add', 'orders', 'purchases']
     if active_tab not in valid_tabs:
-        active_tab = 'dashboard'
+        active_tab = 'overview'
 
     context = {
         'products': products,
@@ -346,6 +348,7 @@ def farmer_dashboard_view(request):
         'in_stock_count': in_stock_count,
         'out_of_stock_count': out_of_stock_count,
         'orders': orders,
+        'purchase_orders': purchase_orders,
         'logistics': logistics,
         'active_tab': active_tab,
     }
@@ -409,7 +412,7 @@ def farmer_order_action_view(request, order_id):
         Notification.objects.create(
             recipient=order.buyer,
             order=order,
-            message=f"Your order #{order.order_id} is on the way! 🚚"
+            message=f"Your order #{order.order_id} is on the way!"
         )
         messages.success(request, f"Order #{order.order_id} marked as Out for Delivery.")
     elif action == 'mark_delivered' and order.status == 'OUT_FOR_DELIVERY':
@@ -466,16 +469,21 @@ def buyer_dashboard_view(request):
 
 @login_required
 def buyer_order_action_view(request, order_id):
-    if request.method != "POST" or not hasattr(request.user, 'profile') or request.user.profile.role != 'buyer':
+    if request.method != "POST" or not hasattr(request.user, 'profile') or request.user.profile.role not in ('buyer', 'farmer'):
         return redirect('home_view')
-        
+
     buyer_profile = request.user.profile
+    if buyer_profile.role == 'farmer':
+        redirect_url = '/farmer/dashboard/?tab=purchases#purchases'
+    else:
+        redirect_url = '/buyer/dashboard/?tab=orders#orders'
+
     try:
         order = Order.objects.get(order_id=order_id, buyer=buyer_profile)
     except Order.DoesNotExist:
         messages.error(request, "Order not found.")
-        return redirect('/buyer/dashboard/?tab=orders')
-        
+        return redirect(redirect_url)
+
     action = request.POST.get('action')
     if action == 'cancel' and order.status == 'PENDING':
         order.status = 'CANCELLED'
@@ -490,26 +498,26 @@ def buyer_order_action_view(request, order_id):
             message=f"{buyer_profile.user.username} cancelled their order #{order.order_id}."
         )
         messages.success(request, f"Order #{order.order_id} cancelled successfully.")
-        return redirect('/buyer/dashboard/?tab=orders#orders')
+        return redirect(redirect_url)
     elif action == 'confirm_receipt' and order.status == 'DELIVERED':
         order.status = 'COMPLETED'
         order.save()
         Notification.objects.create(
             recipient=order.farmer,
             order=order,
-            message=f"Order #{order.order_id} has been marked as received. ✅"
+            message=f"Order #{order.order_id} has been marked as received."
         )
         messages.success(request, f"Order #{order.order_id} marked as completed.")
-        return redirect('/buyer/dashboard/?tab=orders#orders')
+        return redirect(redirect_url)
 
-    return redirect('/buyer/dashboard/?tab=orders#orders')
+    return redirect(redirect_url)
 
 
 # CART & CHECKOUT VIEWS
 def cart_view(request):
     if request.user.is_authenticated:
-        if not hasattr(request.user, 'profile') or request.user.profile.role != 'buyer':
-            messages.error(request, "Only buyers can access the cart.")
+        if not hasattr(request.user, 'profile') or request.user.profile.role not in ('buyer', 'farmer'):
+            messages.error(request, "Only buyers and farmers can access the cart.")
             return redirect('home_view')
         buyer_profile = request.user.profile
 
@@ -566,10 +574,14 @@ def add_to_cart_view(request, product_id):
         return redirect('product_list_view')
 
     if request.user.is_authenticated:
-        if not hasattr(request.user, 'profile') or request.user.profile.role != 'buyer':
-            messages.error(request, "Please create a buyer account to add items to cart.")
+        if not hasattr(request.user, 'profile') or request.user.profile.role not in ('buyer', 'farmer'):
+            messages.error(request, "Please create a buyer or farmer account to add items to cart.")
             return redirect('product_list_view')
         buyer_profile = request.user.profile
+
+        if product.farmer == buyer_profile:
+            messages.error(request, "You cannot buy your own product.")
+            return redirect('product_list_view')
 
         cart, created = Cart.objects.get_or_create(buyer=buyer_profile)
         cart_item, item_created = CartItem.objects.get_or_create(cart=cart, product=product)
@@ -609,7 +621,7 @@ def update_cart_view(request, item_id):
         action = request.POST.get('action')
         
         if request.user.is_authenticated:
-            if not hasattr(request.user, 'profile') or request.user.profile.role != 'buyer':
+            if not hasattr(request.user, 'profile') or request.user.profile.role not in ('buyer', 'farmer'):
                 messages.error(request, "Item not found in your cart.")
                 return redirect('cart_view')
             buyer_profile = request.user.profile
@@ -668,8 +680,8 @@ def update_cart_view(request, item_id):
 
 @login_required
 def checkout_view(request):
-    if not hasattr(request.user, 'profile') or request.user.profile.role != 'buyer':
-        messages.error(request, "Only buyers can proceed to checkout.")
+    if not hasattr(request.user, 'profile') or request.user.profile.role not in ('buyer', 'farmer'):
+        messages.error(request, "Only buyers and farmers can proceed to checkout.")
         return redirect('home_view')
         
     buyer_profile = request.user.profile
@@ -683,14 +695,21 @@ def checkout_view(request):
         messages.error(request, "Your cart is empty.")
         return redirect('cart_view')
         
-    # Group items by farmer
+    # Group items by farmer, skipping any of the buyer's own products
     items_by_farmer = {}
     for item in cart_items:
         farmer = item.product.farmer
+        if farmer == buyer_profile:
+            messages.error(request, f"Skipped {item.product.name}, you cannot buy your own product.")
+            continue
         if farmer not in items_by_farmer:
             items_by_farmer[farmer] = []
         items_by_farmer[farmer].append(item)
-        
+
+    if not items_by_farmer:
+        messages.error(request, "Your cart is empty.")
+        return redirect('cart_view')
+
     # Create Order for each farmer
     for farmer, items in items_by_farmer.items():
         order = Order.objects.create(
